@@ -11,6 +11,7 @@ const UploadWidget = ({ value = null, onChange, disabled = false }: any) => {
   const [preview, setPreview] = useState<UploadWidgetValue | null>(value);
   const [deleteToken, setDeleteToken] = useState<string | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  // Triggering CodeRabbit Review
 
   // 1. Value sync
   useEffect(() => {
@@ -121,3 +122,4 @@ const UploadWidget = ({ value = null, onChange, disabled = false }: any) => {
 };
 
 export default UploadWidget;
+// Force change for CodeRabbit review
