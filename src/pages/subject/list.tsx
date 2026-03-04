@@ -72,6 +72,25 @@ function Subjectslist() {
                         {getValue<string>() || "No description"}
                     </span>
                 )
+            },
+            {
+                id: "teachers",
+                accessorKey: "teachers",
+                size: 220,
+                header: () => <p className="column-title">Teachers</p>,
+                cell: ({ row }) => {
+                    const teachers = row.original.teachers ?? [];
+
+                    if (!teachers.length) {
+                        return <span className="text-muted-foreground">No teacher assigned</span>;
+                    }
+
+                    return (
+                        <span className="truncate line-clamp-2">
+                            {teachers.map((teacher) => teacher.name).join(", ")}
+                        </span>
+                    );
+                }
             }
         ], []),
         refineCoreProps: {

@@ -36,7 +36,7 @@ export const classSchema = z.object({
   roomNumber: z.string(),
   section: z.string().optional(),
   subjectId: z.string().min(1, "Subject is required"),
-  teacherId: z.string(),
+  teacherId: z.string().min(1, "Teacher is required"),
   bannerUrl: z.string().min(1, "Banner image is required"),
   bannerCldPubId: z.string().min(1, "Banner public id is required"),
 });

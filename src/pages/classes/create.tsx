@@ -1,7 +1,8 @@
-import { useForm } from "react-hook-form";
+import { useForm } from "@refinedev/react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useBack, useSelect } from "@refinedev/core";
+import { useMemo } from "react";
+import { useBack, useList, type HttpError } from "@refinedev/core";  
 
 // UI Components
 import { CreateView } from "@/components/refine-ui/views/create-view.tsx";
@@ -33,31 +34,166 @@ import type { UploadWidgetValue } from "@/Types";
 // Schema Import
 import { classSchema } from "@/lib/schema.ts";
 
-const teacherFallbackOptions = [
-  { label: "Alex Johnson", value: "1" },
-  { label: "Sarah Khan", value: "2" },
-  { label: "Michael Lee", value: "3" },
-];
+const MANUAL_TEACHER_OPTIONS = [
+  {
+    value: "teacher-001",
+    label: "Aisha Khan (aisha.khan@school.edu)",
+    secondary: "TEACHER • teacher-001",
+  },
+  {
+    value: "teacher-002",
+    label: "Bilal Ahmed (bilal.ahmed@school.edu)",
+    secondary: "TEACHER • teacher-002",
+  },
+  {
+    value: "teacher-003",
+    label: "Sara Noor (sara.noor@school.edu)",
+    secondary: "TEACHER • teacher-003",
+  },
+] as const;
+
+const MANUAL_SUBJECT_OPTIONS = [
+  {
+    value: "1001",
+    label: "Mathematics (MATH-101)",
+    secondary: "Science Department",
+  },
+  {
+    value: "1002",
+    label: "Physics (PHY-101)",
+    secondary: "Science Department",
+  },
+  {
+    value: "1003",
+    label: "English Literature (ENG-101)",
+    secondary: "Humanities Department",
+  },
+] as const;
 
 const Create = () => {
   const back = useBack();
 
-  const { options: teacherOptions } = useSelect({
-    resource: "teachers",
-    optionLabel: "name",
+  const { result: teacherResult, query: teacherQuery } = useList({
+    resource: "users",
+    pagination: {
+      mode: "off",
+    },
+    filters: [{ field: "role", operator: "eq", value: "teacher" }],
+    meta: {
+      query: {
+        role: "teacher",
+        limit: 1000,
+      },
+    },
   });
 
-  const { options: subjectOptions } = useSelect({
+  const { result: subjectResult, query: subjectQuery } = useList({
     resource: "subjects",
-    optionLabel: "name",
+    pagination: {
+      mode: "off",
+    },
+    meta: {
+      query: {
+        limit: 1000,
+      },
+    },
   });
 
-  const teacherSelectOptions =
-    teacherOptions && teacherOptions.length > 0
-      ? teacherOptions
-      : teacherFallbackOptions;
+  const teacherRows =
+    (teacherResult?.data as Array<Record<string, unknown>> | undefined) ??
+    ((teacherQuery.data as { data?: Array<Record<string, unknown>> } | undefined)?.data as
+      | Array<Record<string, unknown>>
+      | undefined) ??
+    ((teacherQuery.data as Array<Record<string, unknown>> | undefined) ?? []);
 
-  const form = useForm<z.infer<typeof classSchema>>({
+  const subjectRows =
+    (subjectResult?.data as Array<Record<string, unknown>> | undefined) ??
+    ((subjectQuery.data as { data?: Array<Record<string, unknown>> } | undefined)?.data as
+      | Array<Record<string, unknown>>
+      | undefined) ??
+    ((subjectQuery.data as Array<Record<string, unknown>> | undefined) ?? []);
+
+  const teacherOptions = useMemo(
+    () =>
+      teacherRows
+        .map((teacher: Record<string, unknown>) => {
+          const teacherId = String(
+            teacher.id ?? teacher.userId ?? teacher.teacherId ?? teacher.value ?? "",
+          ).trim();
+          const teacherName = String(
+            teacher.name ?? teacher.fullName ?? teacher.teacherName ?? teacher.username ?? "",
+          ).trim();
+          const teacherEmail = String(
+            teacher.email ?? teacher.teacherEmail ?? teacher.userEmail ?? "",
+          ).trim();
+          const teacherRole = String(teacher.role ?? teacher.teacherRole ?? "").trim();
+
+          const label =
+            teacherName && teacherEmail
+              ? `${teacherName} (${teacherEmail})`
+              : teacherName || teacherEmail || teacherId;
+
+          const secondary = [teacherEmail, teacherRole.toUpperCase(), teacherId]
+            .filter(Boolean)
+            .join(" • ");
+
+          return {
+            label,
+            secondary,
+            value: teacherId,
+          };
+        })
+        .filter((teacher: { label: string; value: string }) => teacher.value && teacher.label),
+    [teacherRows],
+  );
+
+  const teacherOptionsToShow = teacherOptions.length > 0 ? teacherOptions : [...MANUAL_TEACHER_OPTIONS];
+
+  const subjectOptions = useMemo(
+    () =>
+      subjectRows
+        .map((subject: Record<string, unknown>) => {
+          const subjectId = String(subject.id ?? "");
+          const subjectName = String(subject.name ?? "").trim();
+          const subjectCode = String(subject.code ?? "").trim();
+          const departmentName = String(subject.departmentName ?? "").trim();
+          const teachers = Array.isArray(subject.teachers)
+            ? (subject.teachers as Array<Record<string, unknown>>)
+            : [];
+
+          const teacherNames = teachers
+            .map((teacher) => String(teacher?.name ?? "").trim())
+            .filter(Boolean)
+            .join(", ");
+
+          const label = subjectCode
+            ? `${subjectName} (${subjectCode})`
+            : subjectName || subjectId;
+
+          const secondary = [departmentName, teacherNames]
+            .filter(Boolean)
+            .join(" • ");
+
+          return {
+            label,
+            secondary,
+            value: subjectId,
+          };
+        })
+        .filter((subject: { label: string; value: string }) => subject.value && subject.label),
+    [subjectRows],
+  );
+
+  const subjectOptionsToShow = subjectOptions.length > 0 ? subjectOptions : [...MANUAL_SUBJECT_OPTIONS];
+
+  const form = useForm<
+    z.infer<typeof classSchema>,
+    HttpError,
+    z.infer<typeof classSchema>
+  >({
+    refineCoreProps: {
+      resource: "classes",
+    },
     resolver: zodResolver(classSchema),
     defaultValues: {
       name: "",
@@ -71,7 +207,13 @@ const Create = () => {
     },
   });
 
-  const { handleSubmit, formState: { isSubmitting, errors }, control, setValue } = form;
+  const {
+    handleSubmit,
+    formState: { isSubmitting },
+    control,
+    setValue,
+    refineCore: { onFinish },
+  } = form;
 
   const bannerPublicId = form.watch("bannerCldPubId");
 
@@ -95,8 +237,12 @@ const Create = () => {
 
   const onSubmit = async (values: z.infer<typeof classSchema>) => {
     try {
-      console.log("Submitting Values:", values);
-      // Add your create mutation here
+      await onFinish({
+        ...values,
+        capacity: Number(values.capacity),
+        subjectId: String(values.subjectId),
+        teacherId: String(values.teacherId),
+      });
     } catch (e) {
       console.log("Error creating class:", e);
     }
@@ -178,9 +324,14 @@ const Create = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {subjectOptions?.map((option: { label: string; value: string | number }) => (
+                            {subjectOptionsToShow.map((option: { label: string; secondary?: string; value: string | number }) => (
                               <SelectItem key={option.value} value={option.value.toString()}>
-                                {option.label}
+                                <div className="flex flex-col">
+                                  <span>{option.label}</span>
+                                  {option.secondary ? (
+                                    <span className="text-xs text-muted-foreground">{option.secondary}</span>
+                                  ) : null}
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -207,9 +358,14 @@ const Create = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {teacherSelectOptions.map((option: { label: string; value: string | number }) => (
+                            {teacherOptionsToShow.map((option: { label: string; secondary?: string; value: string | number }) => (
                               <SelectItem key={option.value} value={option.value.toString()}>
-                                {option.label}
+                                <div className="flex flex-col">
+                                  <span>{option.label}</span>
+                                  {option.secondary ? (
+                                    <span className="text-xs text-muted-foreground">{option.secondary}</span>
+                                  ) : null}
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>

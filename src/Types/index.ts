@@ -5,6 +5,12 @@ export type Subject = {
   department: string;
   description: string;
   createdAt: string;
+  teachers?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: "teacher";
+  }>;
 };
 
 // 1. User Type (Students aur Teachers ke liye)
