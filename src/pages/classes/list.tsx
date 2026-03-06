@@ -1,12 +1,20 @@
 import { Breadcrumb } from '@/components/refine-ui/layout/breadcrumb';
 import { ListView } from '@/components/refine-ui/views/list-view';
-import { Input } from '@/components/ui/input';
+import {
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/refine-ui';
 import { Badge } from '@/components/ui/badge';
 import { Search } from 'lucide-react';
 import { CreateButton } from '@refinedev/antd';
 import { DataTable } from '@/components/refine-ui/data-table/data-table';
 import { useTable } from '@refinedev/react-table';
 import { ColumnDef } from '@tanstack/react-table';
+import { useList } from '@refinedev/core';
 import React, { useMemo, useState } from 'react';
 
 type ClassListItem = {
@@ -15,6 +23,8 @@ type ClassListItem = {
   section: string | null;
   roomNumber: string | null;
   capacity: number | null;
+  bannerUrl: string | null;
+  inviteCode: string | null;
   subjectId: number | null;
   teacherId: string | null;
   subject?: {
@@ -39,14 +49,107 @@ type ClassListItem = {
 
 function ClassesList() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedSubjectId, setSelectedSubjectId] = useState('all');
+  const [selectedTeacherId, setSelectedTeacherId] = useState('all');
+
+  const { result: subjectsResult, query: subjectsQuery } = useList<{ id: number; name: string | null; code: string | null }>({
+    resource: 'subjects',
+    pagination: {
+      mode: 'off',
+    },
+    meta: {
+      query: {
+        limit: 1000,
+      },
+    },
+  });
+
+  const { result: teachersResult, query: teachersQuery } = useList<{ id: string; name: string | null; email: string | null }>({
+    resource: 'users',
+    pagination: {
+      mode: 'off',
+    },
+    filters: [{ field: 'role', operator: 'eq', value: 'teacher' }],
+    meta: {
+      query: {
+        role: 'teacher',
+        limit: 1000,
+      },
+    },
+  });
+
+  const subjectRows =
+    (subjectsResult?.data as Array<{ id: number; name: string | null; code: string | null }> | undefined) ??
+    ((subjectsQuery.data as { data?: Array<{ id: number; name: string | null; code: string | null }> } | undefined)
+      ?.data ??
+      []);
+
+  const teacherRows =
+    (teachersResult?.data as Array<{ id: string; name: string | null; email: string | null }> | undefined) ??
+    ((teachersQuery.data as { data?: Array<{ id: string; name: string | null; email: string | null }> } | undefined)
+      ?.data ??
+      []);
+
+  const subjectOptions = useMemo(
+    () =>
+      subjectRows.map((subject: { id: number; name: string | null; code: string | null }) => ({
+        value: String(subject.id),
+        label: subject.code ? `${subject.name ?? 'Unnamed Subject'} (${subject.code})` : (subject.name ?? 'Unnamed Subject'),
+      })),
+    [subjectRows],
+  );
+
+  const teacherOptions = useMemo(
+    () =>
+      teacherRows.map((teacher: { id: string; name: string | null; email: string | null }) => ({
+        value: teacher.id,
+        label: teacher.name
+          ? teacher.email
+            ? `${teacher.name} (${teacher.email})`
+            : teacher.name
+          : (teacher.email ?? teacher.id),
+      })),
+    [teacherRows],
+  );
 
   const searchfilters = searchQuery
     ? [{ field: 'search', operator: 'eq' as const, value: searchQuery }]
     : [];
 
+  const subjectFilters =
+    selectedSubjectId !== 'all'
+      ? [{ field: 'subjectId', operator: 'eq' as const, value: selectedSubjectId }]
+      : [];
+
+  const teacherFilters =
+    selectedTeacherId !== 'all'
+      ? [{ field: 'teacherId', operator: 'eq' as const, value: selectedTeacherId }]
+      : [];
+
   const classTable = useTable<ClassListItem>({
     columns: useMemo<ColumnDef<ClassListItem>[]>(
       () => [
+        {
+          id: 'bannerUrl',
+          accessorKey: 'bannerUrl',
+          size: 220,
+          header: () => <p className="column-title ml-2">Banner</p>,
+          cell: ({ getValue }) => {
+            const bannerUrl = getValue<string | null>();
+
+            if (!bannerUrl) {
+              return <span className="text-muted-foreground">No banner</span>;
+            }
+
+            return (
+              <img
+                src={bannerUrl}
+                alt="Class banner"
+                className="h-14 w-28 rounded object-cover border"
+              />
+            );
+          },
+        },
         {
           id: 'name',
           accessorKey: 'name',
@@ -60,6 +163,22 @@ function ClassesList() {
               ) : null}
             </div>
           ),
+        },
+        {
+          id: 'status',
+          size: 140,
+          header: () => <p className="column-title">Status</p>,
+          cell: ({ row }) => {
+            const hasTeacher = Boolean(row.original.teacherId);
+            const hasSubject = Boolean(row.original.subjectId);
+            const status = hasTeacher && hasSubject ? 'Active' : 'Pending';
+
+            return (
+              <Badge variant={status === 'Active' ? 'secondary' : 'outline'} className="text-black border-black">
+                {status}
+              </Badge>
+            );
+          },
         },
         {
           id: 'subject',
@@ -80,83 +199,20 @@ function ClassesList() {
             );
           },
         },
-        {
-          id: 'teacher',
-          size: 220,
-          header: () => <p className="column-title">Teacher</p>,
-          cell: ({ row }) => {
-            const teacher = row.original.teacher;
-
-            if (!teacher) {
-              return <span className="text-muted-foreground">No teacher assigned</span>;
-            }
-
-            return (
-              <div className="flex flex-col">
-                <span>{teacher.name || teacher.id}</span>
-                {teacher.email ? <span className="text-xs text-muted-foreground">{teacher.email}</span> : null}
-              </div>
-            );
-          },
-        },
-        {
-          id: 'students',
-          size: 240,
-          header: () => <p className="column-title">Students</p>,
-          cell: ({ row }) => {
-            const students = row.original.students ?? [];
-            const studentsCount = row.original.studentsCount ?? students.length;
-
-            if (!students.length) {
-              return (
-                <div className="flex flex-col">
-                  <span className="text-muted-foreground">No students</span>
-                  <span className="text-xs text-muted-foreground">Count: {studentsCount}</span>
-                </div>
-              );
-            }
-
-            return (
-              <div className="flex flex-col">
-                <span className="truncate line-clamp-2">{students.map((student) => student.name).join(', ')}</span>
-                <span className="text-xs text-muted-foreground">Count: {studentsCount}</span>
-              </div>
-            );
-          },
-        },
-        {
-          id: 'room',
-          size: 180,
-          header: () => <p className="column-title">Room / Capacity</p>,
-          cell: ({ row }) => (
-            <div className="flex flex-col">
-              <span>{row.original.roomNumber || 'N/A'}</span>
-              <span className="text-xs text-muted-foreground">Capacity: {row.original.capacity ?? 0}</span>
-            </div>
-          ),
-        },
-        {
-          id: 'inviteCode',
-          accessorKey: 'inviteCode',
-          size: 140,
-          header: () => <p className="column-title">Invite</p>,
-          cell: ({ getValue }) => (
-            <Badge variant="outline" className="text-black border-black">
-              {String(getValue<string>() || 'N/A')}
-            </Badge>
-          ),
-        },
       ],
       [],
     ),
     refineCoreProps: {
       resource: 'classes',
+      meta: {
+        select: 'data',
+      },
       pagination: {
         pageSize: 10,
         mode: 'server',
       },
       filters: {
-        permanent: [...searchfilters],
+        permanent: [...subjectFilters, ...teacherFilters, ...searchfilters],
       },
       sorters: {
         initial: [{ field: 'id', order: 'desc' as const }],
@@ -182,7 +238,37 @@ function ClassesList() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <CreateButton />
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Select value={selectedSubjectId} onValueChange={setSelectedSubjectId}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Filter by subject" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Subjects</SelectItem>
+                {subjectOptions.map((subject) => (
+                  <SelectItem key={subject.value} value={subject.value}>
+                    {subject.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedTeacherId} onValueChange={setSelectedTeacherId}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Filter by teacher" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Teachers</SelectItem>
+                {teacherOptions.map((teacher) => (
+                  <SelectItem key={teacher.value} value={teacher.value}>
+                    {teacher.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <CreateButton />
+          </div>
         </div>
       </div>
       <DataTable table={classTable} />
