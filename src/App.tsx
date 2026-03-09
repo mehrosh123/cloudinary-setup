@@ -20,9 +20,9 @@ import { ThemedLayout } from "@refinedev/antd";
 
 // --- CLASSES IMPORTS ---
 import ClassesList from "./pages/classes/list";
-import ClassCreate from "./pages/classes/create";
+import ClassShow from "./pages/classes/show";
 
-const API_URL = import.meta.env.VITE_BACKEND_BASE_URL ?? "http://localhost:8001/api";
+const API_URL = import.meta.env.VITE_BACKEND_BASE_URL ?? "http://localhost:8002/api";
 
 function App() {
   const baseDataProvider = dataProvider(API_URL);
@@ -131,6 +131,80 @@ function App() {
         };
       }
     },
+    getOne: async ({ resource, id, meta }: any) => {
+      const queryParams = new URLSearchParams();
+
+      if (meta && typeof meta === "object" && "query" in meta) {
+        const query = (meta as { query?: Record<string, unknown> }).query;
+        if (query && typeof query === "object") {
+          Object.entries(query).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === "") {
+              return;
+            }
+            queryParams.set(key, String(value));
+          });
+        }
+      }
+
+      const queryString = queryParams.toString();
+      const url = queryString
+        ? `${API_URL}/${resource}/${id}?${queryString}`
+        : `${API_URL}/${resource}/${id}`;
+
+      try {
+        const response = await fetch(url);
+        const contentType = response.headers.get("content-type") ?? "";
+        const hasJson = contentType.includes("application/json");
+        const payload = hasJson ? await response.json() : null;
+
+        if (!response.ok) {
+          const backendMessage =
+            typeof payload === "object" && payload !== null && "message" in payload
+              ? String((payload as { message?: unknown }).message ?? "")
+              : typeof payload === "object" && payload !== null && "error" in payload
+                ? String((payload as { error?: unknown }).error ?? "")
+                : "";
+
+          const message = backendMessage || `Request failed with status ${response.status}`;
+
+          throw {
+            message,
+            statusCode: response.status,
+            errors: payload,
+          };
+        }
+
+        const json = payload as { data?: unknown } | null;
+        const data =
+          json && typeof json === "object" && "data" in json
+            ? (json as { data?: unknown }).data
+            : json;
+
+        return {
+          data,
+        };
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          "statusCode" in error
+        ) {
+          throw error;
+        }
+
+        const fallbackMessage =
+          error instanceof Error && error.message
+            ? error.message
+            : "Failed to fetch data from server";
+
+        throw {
+          message: fallbackMessage,
+          statusCode: 0,
+          errors: error,
+        };
+      }
+    },
   };
 
   return (
@@ -157,7 +231,7 @@ function App() {
                 {
                   name: "classes",
                   list: "/classes",
-                  create: "/classes/create",
+                  show: "/classes/show/:id",
                   meta: { label: "Classes", icon: <GraduationCap /> },
                 },
               ]}
@@ -175,7 +249,7 @@ function App() {
                   {/* --- CLASSES ROUTES --- */}
                   <Route path="/classes">
                     <Route index element={<ClassesList />} />
-                    <Route path="create" element={<ClassCreate />} />
+                    <Route path="show/:id" element={<ClassShow />} />
                   </Route>
                 </Route>
               </Routes>
