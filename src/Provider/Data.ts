@@ -6,6 +6,10 @@ type CreateResponse = {
     data?: unknown[];
 };
 
+type GetOneResponse = {
+    data?: unknown[];
+};
+
 const dataProviderOptions = {
     getList: {
         getEndpoint: ({ resource }: { resource: string }) => resource,
@@ -56,8 +60,9 @@ const dataProviderOptions = {
     getOne: {
         getEndpoint: ({ resource, id }: { resource: string; id: string }) => `${resource}/${id}`,
         mapResponse: async (response: Response) => {
-            const payload = await response.json();
-            return payload.data ?? payload;
+            const json: GetOneResponse = await response.json();
+
+            return json.data ?? [];
         },
     },
     create: {
